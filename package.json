@@ -1,0 +1,25 @@
+{
+  "name": "chess_stats_bot",
+  "version": "1.0.0",
+  "description": "Telegram bot for Lichess chess statistics",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc && cp src/data.json dist/",
+    "start": "node dist/index.js",
+    "dev": "tsc && cp src/data.json dist/ && node dist/index.js"
+  },
+  "dependencies": {
+    "node-telegram-bot-api": "^0.61.0",
+    "axios": "^1.4.0",
+    "node-cron": "^3.0.2",
+    "dotenv": "^16.3.1",
+    "date-fns": "^2.30.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.3",
+    "@types/node": "^20.4.5",
+    "@types/node-telegram-bot-api": "^0.61.6",
+    "@types/node-cron": "^3.0.8"
+  },
+  "private": true
+}
