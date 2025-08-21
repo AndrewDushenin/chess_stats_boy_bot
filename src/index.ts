@@ -1,36 +1,36 @@
 import TelegramBot, {
   InlineQueryResultArticle,
   InputTextMessageContent,
-} from 'node-telegram-bot-api'
-import dotenv from 'dotenv'
-import cron from 'node-cron'
-import { format } from 'date-fns'
-import { ChessUser } from './types'
-import * as dataService from './dataService'
-import * as lichessService from './lichessService'
+} from 'node-telegram-bot-api';
+import dotenv from 'dotenv';
+import cron from 'node-cron';
+import { format } from 'date-fns';
+import { ChessUser } from './types';
+import * as db from './db';
+import * as lichessService from './lichessService';
 
-dotenv.config()
+dotenv.config();
 
-const token = process.env.TELEGRAM_BOT_TOKEN
+const token = process.env.TELEGRAM_BOT_TOKEN;
 if (!token) {
-  console.error('TELEGRAM_BOT_TOKEN is not set in .env file')
-  process.exit(1)
+  console.error('TELEGRAM_BOT_TOKEN is not set in .env file');
+  process.exit(1);
 }
 
-const bot = new TelegramBot(token, { polling: true })
-const timezone = process.env.TIMEZONE || 'Europe/Kiev'
+const bot = new TelegramBot(token, { polling: true });
+const timezone = process.env.TIMEZONE || 'Europe/Kiev';
 
 const helpText =
-    'Доступні команди:\n\n' +
-    '/start - Почати роботу з ботом\n' +
-    '/help - Отримати довідку по командам\n' +
-    '/add {username} {real name} - Додати користувача Lichess до відстеження\n' +
-    '/list - Показати список відстежуваних користувачів\n' +
-    '/edit {username} - Редагувати інформацію про користувача\n' +
-    '/daily_stats - Показати щоденну статистику всіх користувачів\n' +
-    '/daily_stats {username} - Показати щоденну статистику конкретного користувача\n' +
-    '/full_stats {username} - Показати повну статистику користувача\n' +
-    '/set_time {HH:MM} - Встановити час для автоматичної щоденної статистики'
+  'Доступні команди:\n\n' +
+  '/start - Почати роботу з ботом\n' +
+  '/help - Отримати довідку по командам\n' +
+  '/add {username} {real name} - Додати користувача Lichess до відстеження\n' +
+  '/list - Показати список відстежуваних користувачів\n' +
+  '/edit {username} - Редагувати інформацію про користувача\n' +
+  '/daily_stats - Показати щоденну статистику всіх користувачів\n' +
+  '/daily_stats {username} - Показати щоденну статистику конкретного користувача\n' +
+  '/full_stats {username} - Показати повну статистику користувача\n' +
+  '/set_time {HH:MM} - Встановити час для автоматичної щоденної статистики';
 
 const botCommands = [
   { command: 'start', description: 'Почати роботу з ботом' },
@@ -41,14 +41,14 @@ const botCommands = [
   { command: 'daily_stats', description: 'Щоденна статистика' },
   { command: 'full_stats', description: 'Повна статистика' },
   { command: 'set_time', description: 'Встановити час для статистики' },
-]
+];
 
-bot.on('inline_query', async query => {
-  const inlineQueryId = query.id
-  const queryText = query.query.trim()
+bot.on('inline_query', async (query) => {
+  const inlineQueryId = query.id;
+  const queryText = query.query.trim();
   try {
-    const users = dataService.listUsers()
-    let results: InlineQueryResultArticle[] = []
+    const users = db.getUsers();
+    let results: InlineQueryResultArticle[] = [];
 
     if (queryText === '') {
       results = [
@@ -57,7 +57,9 @@ bot.on('inline_query', async query => {
           id: 'help',
           title: 'Допомога',
           description: 'Показати список доступних команд',
-          input_message_content: { message_text: helpText } as InputTextMessageContent,
+          input_message_content: {
+            message_text: helpText,
+          } as InputTextMessageContent,
         },
         {
           type: 'article',
@@ -66,9 +68,11 @@ bot.on('inline_query', async query => {
           description: 'Показати список відстежуваних користувачів',
           input_message_content: {
             message_text:
-                users.length === 0
-                    ? 'Список користувачів порожній'
-                    : `Список користувачів:\n${users.map(user => `${user.username} (${user.realName})`).join('\n')}`,
+              users.length === 0
+                ? 'Список користувачів порожній'
+                : `Список користувачів:\n${users
+                    .map((user) => `${user.username} (${user.realName})`)
+                    .join('\n')}`,
           } as InputTextMessageContent,
         },
         {
@@ -78,16 +82,21 @@ bot.on('inline_query', async query => {
           description: 'Показати щоденну статистику всіх користувачів',
           input_message_content: {
             message_text:
-                'Використовуйте команду /daily_stats для отримання щоденної статистики',
+              'Використовуйте команду /daily_stats для отримання щоденної статистики',
           } as InputTextMessageContent,
         },
-      ]
+      ];
     } else if (queryText.startsWith('daily_stats')) {
-      const username = queryText.replace('daily_stats', '').trim()
+      const username = queryText.replace('daily_stats', '').trim();
       if (username) {
-        const user = users.find(u => u.username.toLowerCase() === username.toLowerCase())
+        const user = users.find(
+          (u) => u.username.toLowerCase() === username.toLowerCase()
+        );
         if (user) {
-          const stats = await lichessService.getDailyStats(user.username, user.realName)
+          const stats = await lichessService.getDailyStats(
+            user.username,
+            user.realName
+          );
           results = [
             {
               type: 'article',
@@ -96,11 +105,11 @@ bot.on('inline_query', async query => {
               description: `Статистика для ${user.realName}`,
               input_message_content: {
                 message_text: stats
-                    ? formatDailyStats([stats])
-                    : `Не вдалося отримати статистику для користувача ${username}`,
+                  ? formatDailyStats([stats])
+                  : `Не вдалося отримати статистику для користувача ${username}`,
               } as InputTextMessageContent,
             },
-          ]
+          ];
         } else {
           results = [
             {
@@ -112,7 +121,7 @@ bot.on('inline_query', async query => {
                 message_text: `Користувач ${username} не знайдений у списку`,
               } as InputTextMessageContent,
             },
-          ]
+          ];
         }
       } else {
         results = [
@@ -123,17 +132,19 @@ bot.on('inline_query', async query => {
             description: 'Отримання статистики для всіх користувачів',
             input_message_content: {
               message_text:
-                  'Використовуйте команду /daily_stats для отримання щоденної статистики всіх користувачів',
+                'Використовуйте команду /daily_stats для отримання щоденної статистики всіх користувачів',
             } as InputTextMessageContent,
           },
-        ]
+        ];
       }
     } else if (queryText.startsWith('full_stats')) {
-      const username = queryText.replace('full_stats', '').trim()
+      const username = queryText.replace('full_stats', '').trim();
       if (username) {
-        const user = users.find(u => u.username.toLowerCase() === username.toLowerCase())
+        const user = users.find(
+          (u) => u.username.toLowerCase() === username.toLowerCase()
+        );
         if (user) {
-          const userData = await lichessService.getUserData(username)
+          const userData = await lichessService.getUserData(username);
           results = [
             {
               type: 'article',
@@ -142,11 +153,11 @@ bot.on('inline_query', async query => {
               description: `Статистика для ${user.realName}`,
               input_message_content: {
                 message_text: userData
-                    ? formatFullStats(userData, user)
-                    : `Не вдалося отримати дані для користувача ${username}`,
+                  ? formatFullStats(userData, user)
+                  : `Не вдалося отримати дані для користувача ${username}`,
               } as InputTextMessageContent,
             },
-          ]
+          ];
         } else {
           results = [
             {
@@ -158,7 +169,7 @@ bot.on('inline_query', async query => {
                 message_text: `Користувач ${username} не знайдений у списку`,
               } as InputTextMessageContent,
             },
-          ]
+          ];
         }
       } else {
         results = [
@@ -169,30 +180,30 @@ bot.on('inline_query', async query => {
             description: 'Використовуйте формат: full_stats {username}',
             input_message_content: {
               message_text:
-                  'Використовуйте команду /full_stats {username} для отримання повної статистики користувача',
+                'Використовуйте команду /full_stats {username} для отримання повної статистики користувача',
             } as InputTextMessageContent,
           },
-        ]
+        ];
       }
     } else {
       const matchingUsers = users.filter(
-          user =>
-              user.username.toLowerCase().includes(queryText.toLowerCase()) ||
-              user.realName.toLowerCase().includes(queryText.toLowerCase())
-      )
+        (user) =>
+          user.username.toLowerCase().includes(queryText.toLowerCase()) ||
+          user.realName.toLowerCase().includes(queryText.toLowerCase())
+      );
       if (matchingUsers.length > 0) {
-        results = matchingUsers.map(user => ({
+        results = matchingUsers.map((user) => ({
           type: 'article',
           id: `user_${user.username}`,
           title: user.username,
           description: user.realName,
           input_message_content: {
             message_text:
-                `Інформація про користувача ${user.username} (${user.realName}):\n` +
-                `Використовуйте /daily_stats ${user.username} для отримання щоденної статистики\n` +
-                `Використовуйте /full_stats ${user.username} для отримання повної статистики`,
+              `Інформація про користувача ${user.username} (${user.realName}):\n` +
+              `Використовуйте /daily_stats ${user.username} для отримання щоденної статистики\n` +
+              `Використовуйте /full_stats ${user.username} для отримання повної статистики`,
           } as InputTextMessageContent,
-        }))
+        }));
       } else {
         results = [
           {
@@ -204,12 +215,12 @@ bot.on('inline_query', async query => {
               message_text: helpText,
             } as InputTextMessageContent,
           },
-        ]
+        ];
       }
     }
-    await bot.answerInlineQuery(inlineQueryId, results)
+    await bot.answerInlineQuery(inlineQueryId, results);
   } catch (error) {
-    console.error('Error handling inline query:', error)
+    console.error('Error handling inline query:', error);
     await bot.answerInlineQuery(inlineQueryId, [
       {
         type: 'article',
@@ -217,38 +228,40 @@ bot.on('inline_query', async query => {
         title: 'Помилка',
         description: 'Сталася помилка при обробці запиту',
         input_message_content: {
-          message_text: 'Сталася помилка при обробці запиту. Спробуйте пізніше.',
+          message_text:
+            'Сталася помилка при обробці запиту. Спробуйте пізніше.',
         } as InputTextMessageContent,
       },
-    ])
+    ]);
   }
-})
+});
 
-bot.setMyCommands(botCommands)
-    .then(() => console.log('Bot commands have been set'))
-    .catch(error => console.error('Error setting bot commands:', error))
+bot
+  .setMyCommands(botCommands)
+  .then(() => console.log('Bot commands have been set'))
+  .catch((error) => console.error('Error setting bot commands:', error));
 
 function storeChatId(chatId: number): void {
-  dataService.addChatId(chatId)
+  db.addChatId(chatId);
 }
 
 // Command handlers
-bot.onText(/\/start/, msg => {
-  const chatId = msg.chat.id
-  storeChatId(chatId)
+bot.onText(/\/start/, (msg) => {
+  const chatId = msg.chat.id;
+  storeChatId(chatId);
   bot.sendMessage(
-      chatId,
-      'Привіт! Я бот для отримання статистики з Lichess. Використовуйте команду /help для отримання списку всіх доступних команд.'
-  )
-})
+    chatId,
+    'Привіт! Я бот для отримання статистики з Lichess. Використовуйте команду /help для отримання списку всіх доступних команд.'
+  );
+});
 
 // Help command
-bot.onText(/\/help/, msg => {
-  const chatId = msg.chat.id
-  storeChatId(chatId)
+bot.onText(/\/help/, (msg) => {
+  const chatId = msg.chat.id;
+  storeChatId(chatId);
   bot.sendMessage(
-      chatId,
-      'Доступні команди:\n\n' +
+    chatId,
+    'Доступні команди:\n\n' +
       '/start - Почати роботу з ботом\n' +
       '/help - Отримати довідку по командам\n' +
       '/add {username} {real name} - Додати користувача Lichess до відстеження\n' +
@@ -258,384 +271,466 @@ bot.onText(/\/help/, msg => {
       '/daily_stats {username} - Показати щоденну статистику конкретного користувача\n' +
       '/full_stats {username} - Показати повну статистику користувача\n' +
       '/set_time {HH:MM} - Встановити час для автоматичної щоденної статистики'
-  )
-})
+  );
+});
 
 // Add user command
 bot.onText(/\/add (.+)/, async (msg, match) => {
-  const chatId = msg.chat.id
-  storeChatId(chatId)
+  const chatId = msg.chat.id;
+  storeChatId(chatId);
 
   if (!match || !match[1]) {
-    bot.sendMessage(chatId, 'Використовуйте формат: /add {username} {real name}')
-    return
+    bot.sendMessage(
+      chatId,
+      'Використовуйте формат: /add {username} {real name}'
+    );
+    return;
   }
 
-  const params = match[1].trim().split(' ')
+  const params = match[1].trim().split(' ');
 
   if (params.length < 2) {
-    bot.sendMessage(chatId, 'Використовуйте формат: /add {username} {real name}')
-    return
+    bot.sendMessage(
+      chatId,
+      'Використовуйте формат: /add {username} {real name}'
+    );
+    return;
   }
 
-  const username = params[0]
-  const realName = params.slice(1).join(' ')
+  const username = params[0];
+  const realName = params.slice(1).join(' ');
 
   // Validate username exists on Lichess
-  const userData = await lichessService.getUserData(username)
+  const userData = await lichessService.getUserData(username);
   if (!userData) {
-    bot.sendMessage(chatId, `Користувач ${username} не знайдений на Lichess`)
-    return
+    bot.sendMessage(chatId, `Користувач ${username} не знайдений на Lichess`);
+    return;
   }
 
-  const success = dataService.addUser(username, realName)
+  const success = db.addUser(username, realName);
 
   if (success) {
-    bot.sendMessage(chatId, `Користувач ${username} (${realName}) успішно доданий`)
+    bot.sendMessage(
+      chatId,
+      `Користувач ${username} (${realName}) успішно доданий`
+    );
   } else {
-    bot.sendMessage(chatId, `Користувач ${username} вже існує`)
+    bot.sendMessage(chatId, `Користувач ${username} вже існує`);
   }
-})
+});
 
 // List users command
-bot.onText(/\/list/, msg => {
-  const chatId = msg.chat.id
-  storeChatId(chatId)
-  const users = dataService.listUsers()
+bot.onText(/\/list/, (msg) => {
+  const chatId = msg.chat.id;
+  storeChatId(chatId);
+  const users = db.getUsers();
 
   if (users.length === 0) {
-    bot.sendMessage(chatId, 'Список користувачів порожній')
-    return
+    bot.sendMessage(chatId, 'Список користувачів порожній');
+    return;
   }
 
-  const userList = users.map(user => `${user.username} (${user.realName})`).join('\n')
-  bot.sendMessage(chatId, `Список користувачів:\n${userList}`)
-})
+  const userList = users
+    .map((user) => `${user.username} (${user.realName})`)
+    .join('\n');
+  bot.sendMessage(chatId, `Список користувачів:\n${userList}`);
+});
 
 // Edit user command
 bot.onText(/\/edit (.+)/, (msg, match) => {
-  const chatId = msg.chat.id
-  storeChatId(chatId)
+  const chatId = msg.chat.id;
+  storeChatId(chatId);
 
   if (!match || !match[1]) {
-    bot.sendMessage(chatId, 'Використовуйте формат: /edit {username}')
-    return
+    bot.sendMessage(chatId, 'Використовуйте формат: /edit {username}');
+    return;
   }
 
-  const username = match[1].trim()
-  const users = dataService.listUsers()
-  const user = users.find(u => u.username.toLowerCase() === username.toLowerCase())
+  const username = match[1].trim();
+  const users = db.getUsers();
+  const user = users.find(
+    (u) => u.username.toLowerCase() === username.toLowerCase()
+  );
 
   if (!user) {
-    bot.sendMessage(chatId, `Користувач ${username} не знайдений`)
-    return
+    bot.sendMessage(chatId, `Користувач ${username} не знайдений`);
+    return;
   }
 
   // Store the username being edited in the user's session
-  userSessions.set(chatId, { editingUser: username })
+  userSessions.set(chatId, { editingUser: username });
 
   bot.sendMessage(
-      chatId,
-      `Редагування користувача ${username} (${user.realName}).\n` +
+    chatId,
+    `Редагування користувача ${username} (${user.realName}).\n` +
       "Введіть новий нікнейм та ім'я у форматі: {username} {real name}"
-  )
-})
+  );
+});
 
 // Daily stats command
 bot.onText(/\/daily_stats(?:\s+(.+))?/, async (msg, match) => {
-  const chatId = msg.chat.id
-  storeChatId(chatId)
+  const chatId = msg.chat.id;
+  storeChatId(chatId);
 
   if (match && match[1]) {
     // Get stats for specific user
-    const username = match[1].trim()
-    await sendUserDailyStats(chatId, username)
+    const username = match[1].trim();
+    await sendUserDailyStats(chatId, username);
   } else {
     // Get stats for all users
-    await sendAllUsersDailyStats(chatId)
+    await sendAllUsersDailyStats(chatId);
   }
-})
+});
 
 // Full stats command
 bot.onText(/\/full_stats (.+)/, async (msg, match) => {
-  const chatId = msg.chat.id
-  storeChatId(chatId)
+  const chatId = msg.chat.id;
+  storeChatId(chatId);
 
   if (!match || !match[1]) {
-    bot.sendMessage(chatId, 'Використовуйте формат: /full_stats {username}')
-    return
+    bot.sendMessage(chatId, 'Використовуйте формат: /full_stats {username}');
+    return;
   }
 
-  const username = match[1].trim()
-  const users = dataService.listUsers()
-  const user = users.find(u => u.username.toLowerCase() === username.toLowerCase())
+  const username = match[1].trim();
+  const users = db.getUsers();
+  const user = users.find(
+    (u) => u.username.toLowerCase() === username.toLowerCase()
+  );
 
   if (!user) {
-    bot.sendMessage(chatId, `Користувач ${username} не знайдений у списку`)
-    return
+    bot.sendMessage(chatId, `Користувач ${username} не знайдений у списку`);
+    return;
   }
 
-  const userData = await lichessService.getUserData(username)
+  const userData = await lichessService.getUserData(username);
 
   if (!userData) {
-    bot.sendMessage(chatId, `Не вдалося отримати дані для користувача ${username}`)
-    return
+    bot.sendMessage(
+      chatId,
+      `Не вдалося отримати дані для користувача ${username}`
+    );
+    return;
   }
 
-  const message = formatFullStats(userData, user)
-  bot.sendMessage(chatId, message)
-})
+  const message = formatFullStats(userData, user);
+  bot.sendMessage(chatId, message);
+});
 
 // Set time command
 bot.onText(/\/set_time (.+)/, (msg, match) => {
-  const chatId = msg.chat.id
-  storeChatId(chatId)
+  const chatId = msg.chat.id;
+  storeChatId(chatId);
 
   if (!match || !match[1]) {
-    bot.sendMessage(chatId, 'Використовуйте формат: /set_time {HH:MM}')
-    return
+    bot.sendMessage(chatId, 'Використовуйте формат: /set_time {HH:MM}');
+    return;
   }
 
-  const time = match[1].trim()
-  const success = dataService.setDailyStatsTime(time)
+  const time = match[1].trim();
+  const success = db.setDailyStatsTime(time);
 
   if (success) {
-    bot.sendMessage(chatId, `Час щоденної статистики встановлено на ${time}`)
-    scheduleDailyStats()
+    bot.sendMessage(chatId, `Час щоденної статистики встановлено на ${time}`);
+    scheduleDailyStats();
   } else {
     bot.sendMessage(
-        chatId,
-        'Невірний формат часу. Використовуйте формат HH:MM (наприклад, 22:00)'
-    )
+      chatId,
+      'Невірний формат часу. Використовуйте формат HH:MM (наприклад, 22:00)'
+    );
   }
-})
+});
+
+// Remove user command
+bot.onText(/\/remove (.+)/, (msg, match) => {
+  const chatId = msg.chat.id;
+  db.addChatId(chatId);
+
+  if (!match || !match[1]) {
+    bot.sendMessage(chatId, 'Використовуйте формат: /remove {username}');
+    return;
+  }
+
+  const username = match[1].trim();
+  const success = db.removeUser(username);
+
+  if (success) {
+    bot.sendMessage(chatId, `Користувач ${username} видалений`);
+  } else {
+    bot.sendMessage(chatId, `Користувача ${username} не знайдено`);
+  }
+});
 
 // Handle text messages (for editing users)
-const userSessions = new Map<number, { editingUser?: string }>()
+const userSessions = new Map<number, { editingUser?: string }>();
 
-bot.on('text', async msg => {
-  const chatId = msg.chat.id
-  storeChatId(chatId)
-  const text = msg.text
+bot.on('text', async (msg) => {
+  const chatId = msg.chat.id;
+  storeChatId(chatId);
+  const text = msg.text;
 
   // Skip commands or empty messages
   if (!text || text.startsWith('/')) {
-    return
+    return;
   }
 
-  const session = userSessions.get(chatId)
+  const session = userSessions.get(chatId);
 
   if (session?.editingUser) {
-    const params = text.split(' ')
+    const params = text.split(' ');
 
     if (params.length < 2) {
-      bot.sendMessage(chatId, 'Використовуйте формат: {username} {real name}')
-      return
+      bot.sendMessage(chatId, 'Використовуйте формат: {username} {real name}');
+      return;
     }
 
-    const newUsername = params[0]
-    const newRealName = params.slice(1).join(' ')
+    const newUsername = params[0];
+    const newRealName = params.slice(1).join(' ');
 
     // Validate new username exists on Lichess
-    const userData = await lichessService.getUserData(newUsername)
+    const userData = await lichessService.getUserData(newUsername);
     if (!userData) {
-      bot.sendMessage(chatId, `Користувач ${newUsername} не знайдений на Lichess`)
-      return
+      bot.sendMessage(
+        chatId,
+        `Користувач ${newUsername} не знайдений на Lichess`
+      );
+      return;
     }
 
-    const success = dataService.editUser(session.editingUser, newUsername, newRealName)
+    const success = db.editUser(session.editingUser, newUsername, newRealName);
 
     if (success) {
       bot.sendMessage(
-          chatId,
-          `Користувач ${session.editingUser} успішно змінений на ${newUsername} (${newRealName})`
-      )
+        chatId,
+        `Користувач ${session.editingUser} успішно змінений на ${newUsername} (${newRealName})`
+      );
     } else {
-      bot.sendMessage(chatId, `Помилка при редагуванні користувача ${session.editingUser}`)
+      bot.sendMessage(
+        chatId,
+        `Помилка при редагуванні користувача ${session.editingUser}`
+      );
     }
 
     // Clear the session
-    userSessions.delete(chatId)
+    userSessions.delete(chatId);
   }
-})
+});
 
 // Helper functions
-async function sendUserDailyStats(chatId: number, username: string): Promise<void> {
-  const users = dataService.listUsers()
-  const user = users.find(u => u.username.toLowerCase() === username.toLowerCase())
+async function sendUserDailyStats(
+  chatId: number,
+  username: string
+): Promise<void> {
+  const users = db.getUsers();
+  const user = users.find(
+    (u) => u.username.toLowerCase() === username.toLowerCase()
+  );
 
   if (!user) {
-    bot.sendMessage(chatId, `Користувач ${username} не знайдений у списку`)
-    return
+    bot.sendMessage(chatId, `Користувач ${username} не знайдений у списку`);
+    return;
   }
 
-  const stats = await lichessService.getDailyStats(user.username, user.realName)
+  const stats = await lichessService.getDailyStats(
+    user.username,
+    user.realName
+  );
 
   if (!stats) {
-    bot.sendMessage(chatId, `Не вдалося отримати статистику для користувача ${username}`)
-    return
+    bot.sendMessage(
+      chatId,
+      `Не вдалося отримати статистику для користувача ${username}`
+    );
+    return;
   }
 
-  const message = formatDailyStats([stats])
-  bot.sendMessage(chatId, message)
+  const message = formatDailyStats([stats]);
+  bot.sendMessage(chatId, message);
 }
 
 async function sendAllUsersDailyStats(chatId: number): Promise<void> {
-  const users = dataService.listUsers()
+  const users = db.getUsers();
 
   if (users.length === 0) {
-    bot.sendMessage(chatId, 'Список користувачів порожній')
-    return
+    bot.sendMessage(chatId, 'Список користувачів порожній');
+    return;
   }
 
-  bot.sendMessage(chatId, 'Отримання статистики для всіх користувачів...')
+  bot.sendMessage(chatId, 'Отримання статистики для всіх користувачів...');
 
-  const statsPromises = users.map(user =>
-      lichessService.getDailyStats(user.username, user.realName)
-  )
+  const statsPromises = users.map((user) =>
+    lichessService.getDailyStats(user.username, user.realName)
+  );
 
-  const statsResults = await Promise.all(statsPromises)
-  const validStats = statsResults.filter(Boolean)
+  const statsResults = await Promise.all(statsPromises);
+  const validStats = statsResults.filter(Boolean);
 
   if (validStats.length === 0) {
-    bot.sendMessage(chatId, 'Не вдалося отримати статистику для жодного користувача')
-    return
+    bot.sendMessage(
+      chatId,
+      'Не вдалося отримати статистику для жодного користувача'
+    );
+    return;
   }
 
   const message = formatDailyStats(
-      validStats as NonNullable<Awaited<ReturnType<typeof lichessService.getDailyStats>>>[]
-  )
-  bot.sendMessage(chatId, message)
+    validStats as NonNullable<
+      Awaited<ReturnType<typeof lichessService.getDailyStats>>
+    >[]
+  );
+  bot.sendMessage(chatId, message);
 }
 
 async function sendDailyStatsToAllChats(): Promise<void> {
-  const users = dataService.listUsers()
+  const users = db.getUsers();
 
   if (users.length === 0) {
-    console.log('No users to send stats for')
-    return
+    console.log('No users to send stats for');
+    return;
   }
 
-  const statsPromises = users.map(user =>
-      lichessService.getDailyStats(user.username, user.realName)
-  )
+  const statsPromises = users.map((user) =>
+    lichessService.getDailyStats(user.username, user.realName)
+  );
 
-  const statsResults = await Promise.all(statsPromises)
-  const validStats = statsResults.filter(Boolean)
+  const statsResults = await Promise.all(statsPromises);
+  const validStats = statsResults.filter(Boolean);
 
   if (validStats.length === 0) {
-    console.log('Failed to get stats for any user')
-    return
+    console.log('Failed to get stats for any user');
+    return;
   }
 
   const message = formatDailyStats(
-      validStats as NonNullable<Awaited<ReturnType<typeof lichessService.getDailyStats>>>[]
-  )
+    validStats as NonNullable<
+      Awaited<ReturnType<typeof lichessService.getDailyStats>>
+    >[]
+  );
 
   // Send to all chats that have interacted with the bot
-  const chatIds = dataService.getChatIds()
-  console.log(`Sending daily stats to ${chatIds.length} chats`)
+  const chatIds = db.getChatIds();
+  console.log(`Sending daily stats to ${chatIds.length} chats`);
 
   for (const chatId of chatIds) {
-    bot.sendMessage(chatId, message).catch(error =>
+    bot
+      .sendMessage(chatId, message)
+      .catch((error) =>
         console.error(`Error sending message to chat ${chatId}:`, error)
-    )
+      );
   }
 }
 
 function formatDailyStats(
-    statsList: Array<NonNullable<Awaited<ReturnType<typeof lichessService.getDailyStats>>>>
+  statsList: Array<
+    NonNullable<Awaited<ReturnType<typeof lichessService.getDailyStats>>>
+  >
 ): string {
-  const date = format(new Date(), 'dd.MM.yyyy HH:mm')
-  let message = `${date}\n`
+  const date = format(new Date(), 'dd.MM.yyyy HH:mm');
+  let message = `${date}\n`;
 
   for (const stats of statsList) {
     if (stats) {
-      message += `${stats.username} (${stats.realName}):\n`
-      message += `Зіграв ${stats.gamesPlayed.total} ігор (${stats.gamesPlayed.bullet} куля, ${stats.gamesPlayed.blitz} бліц, ${stats.gamesPlayed.rapid} рапід)\n`
-      message += `Вирішив ${stats.puzzlesSolved} задач\n`
-      message += `Зміни у рейтингу ${formatRatingChange(stats.ratingChanges.bullet)} куля, ${formatRatingChange(stats.ratingChanges.blitz)} бліц, ${formatRatingChange(stats.ratingChanges.rapid)} рапід.\n`
-      message += `Середній рейтинг ${stats.averageRating}. Всього зіграно рейтингових партій ${stats.totalRatedGames}\n\n`
+      message += `${stats.username} (${stats.realName}):\n`;
+      message += `Зіграв ${stats.gamesPlayed.total} ігор (${stats.gamesPlayed.bullet} куля, ${stats.gamesPlayed.blitz} бліц, ${stats.gamesPlayed.rapid} рапід)\n`;
+      message += `Вирішив ${stats.puzzlesSolved} задач\n`;
+      message += `Зміни у рейтингу ${formatRatingChange(
+        stats.ratingChanges.bullet
+      )} куля, ${formatRatingChange(
+        stats.ratingChanges.blitz
+      )} бліц, ${formatRatingChange(stats.ratingChanges.rapid)} рапід.\n`;
+      message += `Середній рейтинг ${stats.averageRating}. Всього зіграно рейтингових партій ${stats.totalRatedGames}\n\n`;
     }
   }
 
-  return message.trim()
+  return message.trim();
 }
 
 function formatFullStats(
-    userData: NonNullable<Awaited<ReturnType<typeof lichessService.getUserData>>>,
-    user: ChessUser
+  userData: NonNullable<Awaited<ReturnType<typeof lichessService.getUserData>>>,
+  user: ChessUser
 ): string {
-  let message = `Повна статистика для ${user.username} (${user.realName}):\n\n`
+  let message = `Повна статистика для ${user.username} (${user.realName}):\n\n`;
 
-  message += `Профіль: https://lichess.org/@/${userData.username}\n`
-  message += `Створений: ${format(new Date(userData.createdAt), 'dd.MM.yyyy')}\n`
-  message += `Остання активність: ${format(new Date(userData.seenAt), 'dd.MM.yyyy HH:mm')}\n\n`
+  message += `Профіль: https://lichess.org/@/${userData.username}\n`;
+  message += `Створений: ${format(
+    new Date(userData.createdAt),
+    'dd.MM.yyyy'
+  )}\n`;
+  message += `Остання активність: ${format(
+    new Date(userData.seenAt),
+    'dd.MM.yyyy HH:mm'
+  )}\n\n`;
 
-  message += 'Рейтинги:\n'
+  message += 'Рейтинги:\n';
   if (userData.perfs.bullet) {
-    message += `Куля: ${userData.perfs.bullet.rating} (${userData.perfs.bullet.games} ігор)\n`
+    message += `Куля: ${userData.perfs.bullet.rating} (${userData.perfs.bullet.games} ігор)\n`;
   }
   if (userData.perfs.blitz) {
-    message += `Бліц: ${userData.perfs.blitz.rating} (${userData.perfs.blitz.games} ігор)\n`
+    message += `Бліц: ${userData.perfs.blitz.rating} (${userData.perfs.blitz.games} ігор)\n`;
   }
   if (userData.perfs.rapid) {
-    message += `Рапід: ${userData.perfs.rapid.rating} (${userData.perfs.rapid.games} ігор)\n`
+    message += `Рапід: ${userData.perfs.rapid.rating} (${userData.perfs.rapid.games} ігор)\n`;
   }
   if (userData.perfs.puzzle) {
-    message += `Задачі: ${userData.perfs.puzzle.rating} (${userData.perfs.puzzle.games} задач)\n`
+    message += `Задачі: ${userData.perfs.puzzle.rating} (${userData.perfs.puzzle.games} задач)\n`;
   }
 
-  message += '\nСтатистика ігор:\n'
-  message += `Всього ігор: ${userData.count.all}\n`
-  message += `Рейтингових ігор: ${userData.count.rated}\n`
-  message += `Перемог: ${userData.count.win} (${Math.round((userData.count.win / userData.count.all) * 100)}%)\n`
-  message += `Нічиїх: ${userData.count.draw} (${Math.round((userData.count.draw / userData.count.all) * 100)}%)\n`
-  message += `Поразок: ${userData.count.loss} (${Math.round((userData.count.loss / userData.count.all) * 100)}%)\n`
+  message += '\nСтатистика ігор:\n';
+  message += `Всього ігор: ${userData.count.all}\n`;
+  message += `Рейтингових ігор: ${userData.count.rated}\n`;
+  message += `Перемог: ${userData.count.win} (${Math.round(
+    (userData.count.win / userData.count.all) * 100
+  )}%)\n`;
+  message += `Нічиїх: ${userData.count.draw} (${Math.round(
+    (userData.count.draw / userData.count.all) * 100
+  )}%)\n`;
+  message += `Поразок: ${userData.count.loss} (${Math.round(
+    (userData.count.loss / userData.count.all) * 100
+  )}%)\n`;
 
-  return message
+  return message;
 }
 
 function formatRatingChange(change: number): string {
   if (change > 0) {
-    return `+${change}`
+    return `+${change}`;
   } else if (change < 0) {
-    return `${change}`
+    return `${change}`;
   } else {
-    return '0'
+    return '0';
   }
 }
 
 // Schedule daily stats
-let dailyStatsJob: cron.ScheduledTask | null = null
+let dailyStatsJob: cron.ScheduledTask | null = null;
 
 function scheduleDailyStats(): void {
   // Cancel existing job if any
   if (dailyStatsJob) {
-    dailyStatsJob.stop()
+    dailyStatsJob.stop();
   }
 
-  const time = dataService.getDailyStatsTime()
-  const [hours, minutes] = time.split(':')
+  const time = db.getDailyStatsTime();
+  const [hours, minutes] = time.split(':');
 
   // Schedule new job
   dailyStatsJob = cron.schedule(
-      `${minutes} ${hours} * * *`,
-      async () => {
-        console.log(`Running scheduled daily stats at ${time}`)
+    `${minutes} ${hours} * * *`,
+    async () => {
+      console.log(`Running scheduled daily stats at ${time}`);
 
-        // Call sendDailyStatsToAllChats to send stats to all stored chat IDs
-        await sendDailyStatsToAllChats()
-      },
-      {
-        timezone,
-      }
-  )
+      // Call sendDailyStatsToAllChats to send stats to all stored chat IDs
+      await sendDailyStatsToAllChats();
+    },
+    {
+      timezone,
+    }
+  );
 
-  console.log(`Daily stats scheduled for ${time}`)
+  console.log(`Daily stats scheduled for ${time}`);
 }
 
 // Initialize scheduled job
-scheduleDailyStats()
+scheduleDailyStats();
 
-console.log('Bot started')
+console.log('Bot started');
