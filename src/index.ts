@@ -652,13 +652,12 @@ function formatDailyStats(
 
   for (const stats of statsList) {
     const gamesTotal =
-      (stats.gamesPlayed.bullet ?? 0) +
-      (stats.gamesPlayed.blitz ?? 0) +
-      (stats.gamesPlayed.rapid ?? 0) +
-      (stats.gamesPlayed.classical ?? 0);
+      stats.gamesPlayed.bullet +
+      stats.gamesPlayed.blitz +
+      stats.gamesPlayed.rapid +
+      stats.gamesPlayed.classical;
 
-    const puzzlesTotal =
-      (stats.puzzlesSolved.win ?? 0) + (stats.puzzlesSolved.loss ?? 0);
+    const puzzlesTotal = stats.puzzlesSolved.win + stats.puzzlesSolved.loss;
 
     let mood = '😃';
     if (gamesTotal === 0 && puzzlesTotal === 0) {
