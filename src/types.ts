@@ -13,10 +13,10 @@ export interface LichessUserData {
   id: string;
   username: string;
   perfs: {
-    bullet?: { rating: number, games: number };
-    blitz?: { rating: number, games: number };
-    rapid?: { rating: number, games: number };
-    puzzle?: { rating: number, games: number };
+    bullet?: { rating: number; games: number };
+    blitz?: { rating: number; games: number };
+    rapid?: { rating: number; games: number };
+    puzzle?: { rating: number; games: number };
   };
   count: {
     all: number;
@@ -58,7 +58,12 @@ export interface LichessActivityData {
     };
   };
   puzzles?: {
-    score: number;
+    score: {
+      win: number;
+      loss: number;
+      draw: number;
+      rp: { before: number; after: number };
+    };
   };
 }
 
@@ -70,8 +75,14 @@ export interface DailyStats {
     bullet: number;
     blitz: number;
     rapid: number;
+    classical: number;
   };
-  puzzlesSolved: number;
+  puzzlesSolved: {
+    win: number;
+    loss: number;
+    draw: number;
+    rp: { before: number; after: number };
+  };
   ratingChanges: {
     bullet: number;
     blitz: number;

@@ -8,6 +8,7 @@ import { format } from 'date-fns';
 import { ChessUser } from './types';
 import * as db from './db';
 import * as lichessService from './lichessService';
+import { text } from 'stream/consumers';
 
 dotenv.config();
 
@@ -545,7 +546,7 @@ async function sendUserDailyStats(
   }
 
   const message = formatDailyStats([stats]);
-  bot.sendMessage(chatId, message);
+  bot.sendMessage(chatId, message, { parse_mode: 'MarkdownV2' });
 }
 
 async function sendAllUsersDailyStats(chatId: number): Promise<void> {
@@ -578,7 +579,7 @@ async function sendAllUsersDailyStats(chatId: number): Promise<void> {
       Awaited<ReturnType<typeof lichessService.getDailyStats>>
     >[]
   );
-  bot.sendMessage(chatId, message);
+  bot.sendMessage(chatId, message, { parse_mode: 'MarkdownV2' });
 }
 
 async function sendDailyStatsToAllChats(): Promise<void> {
@@ -620,26 +621,77 @@ async function sendDailyStatsToAllChats(): Promise<void> {
   }
 }
 
+function escapeMarkdownV2(text: string) {
+  return text
+    .replace(/_/g, '\\_')
+    .replace(/\*/g, '\\*')
+    .replace(/\[/g, '\\[')
+    .replace(/`/g, '\\`')
+    .replace(/>/g, '\\>')
+    .replace(/\(/g, '\\(')
+    .replace(/\)/g, '\\)')
+    .replace(/~/g, '\\~')
+    .replace(/-/g, '\\-')
+    .replace(/#/g, '\\#')
+    .replace(/\+/g, '\\+')
+    .replace(/=/g, '\\=')
+    .replace(/\|/g, '\\|')
+    .replace(/\{/g, '\\{')
+    .replace(/\}/g, '\\}')
+    .replace(/\./g, '\\.')
+    .replace(/!/g, '\\!');
+}
+
 function formatDailyStats(
   statsList: Array<
     NonNullable<Awaited<ReturnType<typeof lichessService.getDailyStats>>>
   >
 ): string {
-  const date = format(new Date(), 'dd.MM.yyyy HH:mm');
-  let message = `${date}\n`;
+  const date = format(new Date(), 'dd.MM.yyyy');
+  let message = `Статистика за ${escapeMarkdownV2(date)}\n\n`;
 
   for (const stats of statsList) {
-    if (stats) {
-      message += `${stats.username} (${stats.realName}):\n`;
-      message += `Зіграв ${stats.gamesPlayed.total} ігор (${stats.gamesPlayed.bullet} куля, ${stats.gamesPlayed.blitz} бліц, ${stats.gamesPlayed.rapid} рапід)\n`;
-      message += `Вирішив ${stats.puzzlesSolved} задач\n`;
-      message += `Зміни у рейтингу ${formatRatingChange(
-        stats.ratingChanges.bullet
-      )} куля, ${formatRatingChange(
-        stats.ratingChanges.blitz
-      )} бліц, ${formatRatingChange(stats.ratingChanges.rapid)} рапід.\n`;
-      message += `Середній рейтинг ${stats.averageRating}. Всього зіграно рейтингових партій ${stats.totalRatedGames}\n\n`;
+    const gamesTotal =
+      (stats.gamesPlayed.bullet ?? 0) +
+      (stats.gamesPlayed.blitz ?? 0) +
+      (stats.gamesPlayed.rapid ?? 0) +
+      (stats.gamesPlayed.classical ?? 0);
+
+    const puzzlesTotal =
+      (stats.puzzlesSolved.win ?? 0) + (stats.puzzlesSolved.loss ?? 0);
+
+    let mood = '😃';
+    if (gamesTotal === 0 && puzzlesTotal === 0) {
+      mood = '😡';
+    } else if (gamesTotal === 0 || puzzlesTotal === 0) {
+      mood = '🤔';
     }
+
+    message += `👤 ${escapeMarkdownV2(stats.username)} \\(${escapeMarkdownV2(
+      stats.realName
+    )}\\) ${mood}\n`;
+
+    message += '```\n';
+
+    if (gamesTotal === 0) {
+      message += `🎮 → Жодної партії 🤷‍♂️\n`;
+    } else {
+      message += `🎮 → 🔫 ${stats.gamesPlayed.bullet ?? 0} ⚡️${
+        stats.gamesPlayed.blitz ?? 0
+      } 🐇${stats.gamesPlayed.rapid ?? 0} 🐢 ${
+        stats.gamesPlayed.classical ?? 0
+      }\n`;
+    }
+
+    if (puzzlesTotal === 0) {
+      message += `\n🧩 → Жодної задачі 🤷‍♂️\n`;
+    } else {
+      message += `\n🧩 → ✅ ${stats.puzzlesSolved.win ?? 0} 🚫 ${
+        stats.puzzlesSolved.loss ?? 0
+      }\n`;
+    }
+    message += `\n📈 ≈${stats.averageRating} ELO   🧮 ${stats.totalRatedGames} games\n`;
+    message += '```\n\n';
   }
 
   return message.trim();
