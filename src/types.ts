@@ -5,8 +5,8 @@ export interface ChessUser {
 
 export interface BotData {
   users: ChessUser[];
-  dailyStatsTime: string; // Format: "HH:MM"
-  chatIds: number[]; // Store chat IDs of users who have interacted with the bot
+  dailyStatsTime: string;
+  chatIds: number[];
 }
 
 export interface LichessUserData {
